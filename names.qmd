@@ -15,7 +15,7 @@ library(tidyverse)
 library(scales)
 ```
 
-## Popularity: Molly vs. Michael (Top Male Name in 1991)
+## Popularity: Molly vs. Olivia (Today's Top Female Name)
 
 ```{r}
 #| label: name-comparison
@@ -31,37 +31,66 @@ babies <- read_csv(
 ) |>
   mutate(year = parse_number(basename(file)))
 
-# Identify the most popular male name in 1991
-top_male_1991 <- babies |>
-  filter(year == 1991, sex == "M") |>
+# Identify today's most popular female name in the latest year
+latest_year <- max(babies$year)
+top_female_today <- babies |>
+  filter(year == latest_year, sex == "F") |>
   slice_max(n, n = 1) |>
   pull(name)
 
 # Filter both names for the last 50 years and aggregate counts
 comp_data <- babies |>
-  filter(name %in% c("Molly", top_male_1991), year >= 1976) |>
+  filter(name %in% c("Molly", top_female_today), year >= 1976) |>
   group_by(name, year) |>
   summarise(n = sum(n), .groups = "drop") |>
   mutate(tooltip = paste0("Name: ", name, "\nYear: ", year, "\nBabies: ", comma(n)))
 
-# Build side-by-side comparison with independent y-axes
-p <- ggplot(comp_data, aes(x = year, y = n, color = name, text = tooltip, group = name)) +
+# Create expanding frames so lines trace forward through time
+comp_anim <- comp_data |>
+  crossing(frame = unique(comp_data$year)) |>
+  filter(year <= frame)
+
+# Show birth milestone once the animation reaches 2008
+birth_point <- comp_anim |>
+  filter(name == "Molly", year == 2008)
+
+birth_label <- comp_anim |>
+  filter(name == "Molly", year == 2008) |>
+  mutate(
+    n = n + 550,
+    label = "When I was born\n↓"
+  )
+
+# Build animated side-by-side comparison
+p <- ggplot(comp_anim, aes(x = year, y = n, color = name, text = tooltip, frame = frame, group = name)) +
   geom_line(linewidth = 1) +
   geom_point(size = 1.2) +
+  geom_point(data = birth_point, aes(x = year, y = n), color = "#e7298a", size = 3, inherit.aes = FALSE) +
+  geom_text(
+    data = birth_label,
+    aes(x = year, y = n, label = label),
+    inherit.aes = FALSE,
+    color = "#e7298a",
+    fontface = "bold",
+    size = 3.5,
+    vjust = 0
+  ) +
   facet_wrap(~name, scales = "free_y") +
-  scale_color_manual(values = c("Michael" = "#d95f02", "Molly" = "#2b5c8f")) +
-  scale_x_continuous(breaks = seq(1980, 2020, by = 10)) +
-  scale_y_continuous(labels = label_comma(), limits = c(0, NA)) +
+  scale_color_manual(values = c("Olivia" = "#1b9e77", "Molly" = "#2b5c8f")) +
+  scale_x_continuous(breaks = seq(1980, 2020, by = 10), limits = c(1976, 2025)) +
+  scale_y_continuous(labels = label_comma()) +
   labs(
-    title = paste("Popularity Trend: Molly vs.", top_male_1991, "(1976–2025)"),
+    title = paste("Popularity Trend: Molly vs.", top_female_today, "(1976–2025)"),
     x = "Year",
     y = "Number of Babies"
   ) +
   theme_minimal() +
   theme(legend.position = "none")
 
-# Interactive plot with hover tooltips
-ggplotly(p, tooltip = "text")
+# Interactive animated plot with Play/Pause controls
+ggplotly(p, tooltip = "text") |>
+  animation_opts(frame = 90, transition = 0, redraw = FALSE) |>
+  animation_slider(currentvalue = list(prefix = "Year: "))
 ```
 
-In 1991, the most popular male name was **Michael** with 61,077 babies, coinciding with Molly's peak year of 4,663 babies. While Molly rose sharply through the 1980s before tapering off, Michael was undergoing a long, steady decline from over 67,000 in 1976 to around 8,100 in 2025.
+Today's most popular female name is **Olivia** (13,554 babies in 2025). While both names started at comparable levels in 1976 (around 1,200 to 1,700 babies), Molly peaked early in 1991, whereas Olivia surged dramatically starting in the late 1990s and has stayed near the top of the charts ever since.
